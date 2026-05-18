@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RPS AI — 패턴 학습 가위바위보</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a14;
+      --surface: #11111f;
+      --card: #181828;
+      --border: #2a2a4a;
+      --accent: #7c3aed;
+      --accent2: #06b6d4;
+      --win: #10b981;
+      --loss: #ef4444;
+      --draw: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --glow: rgba(124, 58, 237, 0.4);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Noto Sans KR', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── 배경 그리드 ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(124,58,237,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,58,237,.06) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+
+    /* ── 헤더 ── */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .logo {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: .1em;
+      text-shadow: none;
+      filter: drop-shadow(0 0 20px var(--glow));
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: .85rem;
+      margin-top: .4rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    /* ── 점수판 ── */
+    .scoreboard {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      align-items: center;
+    }
+
+    .score-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem;
+      text-align: center;
+    }
+
+    .score-card.player-card { border-color: var(--accent); }
+    .score-card.ai-card { border-color: var(--accent2); }
+
+    .score-label {
+      font-family: 'Orbitron', monospace;
+      font-size: .65rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .4rem;
+    }
+
+    .score-num {
+      font-family: 'Orbitron', monospace;
+      font-size: 2.5rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .player-card .score-num { color: var(--accent); filter: drop-shadow(0 0 8px var(--glow)); }
+    .ai-card .score-num { color: var(--accent2); filter: drop-shadow(0 0 8px rgba(6,182,212,.4)); }
+
+    .vs-badge {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900;
+      font-size: 1.2rem;
+      color: var(--muted);
+      letter-spacing: .1em;
+    }
+
+    /* ── 라운드 결과 표시 ── */
+    .battle-area {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color .3s;
+    }
+
+    .battle-area.result-player { border-color: var(--win); box-shadow: 0 0 20px rgba(16,185,129,.15); }
+    .battle-area.result-ai { border-color: var(--loss); box-shadow: 0 0 20px rgba(239,68,68,.15); }
+    .battle-area.result-draw { border-color: var(--draw); box-shadow: 0 0 20px rgba(245,158,11,.15); }
+
+    .battle-content {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      width: 100%;
+    }
+
+    .battle-side {
+      flex: 1;
+      text-align: center;
+    }
+
+    .battle-move {
+      font-size: 3.5rem;
+      line-height: 1;
+      animation: pop .3s ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      70% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .battle-label {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: .3rem;
+      letter-spacing: .1em;
+    }
+
+    .battle-divider {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .3rem;
+    }
+
+    .result-text {
+      font-family: 'Orbitron', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .result-text.win { color: var(--win); }
+    .result-text.loss { color: var(--loss); }
+    .result-text.draw { color: var(--draw); }
+
+    .round-num {
+      font-size: .7rem;
+      color: var(--muted);
+      letter-spacing: .1em;
+    }
+
+    .placeholder-text {
+      color: var(--muted);
+      font-size: .9rem;
+      letter-spacing: .05em;
+    }
+
+    /* ── AI 예측 정보 ── */
+    .ai-info {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .8rem 1.2rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+
+    .ai-info .badge {
+      background: rgba(6,182,212,.12);
+      color: var(--accent2);
+      border: 1px solid rgba(6,182,212,.3);
+      border-radius: 6px;
+      padding: .2rem .6rem;
+      font-family: 'Orbitron', monospace;
+      font-size: .65rem;
+      letter-spacing: .1em;
+      white-space: nowrap;
+    }
+
+    .confidence-bar-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+    }
+
+    .confidence-bar {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .confidence-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
+      border-radius: 2px;
+      transition: width .5s ease;
+    }
+
+    /* ── 버튼 그룹 ── */
+    .move-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .move-btn {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem .5rem;
+      cursor: pointer;
+      transition: all .2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .5rem;
+      color: var(--text);
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+
+    .move-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: rgba(124,58,237,.1);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px var(--glow);
+    }
+
+    .move-btn:active:not(:disabled) { transform: translateY(0); }
+
+    .move-btn:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    .move-icon { font-size: 2.5rem; }
+    .move-name {
+      font-size: .8rem;
+      letter-spacing: .1em;
+      color: var(--muted);
+    }
+
+    /* ── 통계 패널 ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+
+    .stat-title {
+      font-size: .7rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .8rem;
+    }
+
+    /* 승률 바 */
+    .win-rate-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      gap: 2px;
+      margin-bottom: .5rem;
+    }
+
+    .win-bar { background: var(--win); border-radius: 4px; transition: flex .5s ease; }
+    .loss-bar { background: var(--loss); border-radius: 4px; transition: flex .5s ease; }
+    .draw-bar { background: var(--draw); border-radius: 4px; transition: flex .5s ease; }
+
+    .win-rate-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: .72rem;
+    }
+
+    .wl { color: var(--win); }
+    .ll { color: var(--loss); }
+    .dl { color: var(--draw); }
+
+    /* 이동 빈도 */
+    .freq-item {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      margin-bottom: .4rem;
+      font-size: .78rem;
+    }
+
+    .freq-name { width: 2.5rem; color: var(--muted); }
+    .freq-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .freq-bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width .5s ease; }
+    .freq-num { width: 2rem; text-align: right; color: var(--muted); font-size: .7rem; }
+
+    /* ── 최근 기록 ── */
+    .history-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: .3rem;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    .history-list::-webkit-scrollbar { width: 4px; }
+    .history-list::-webkit-scrollbar-track { background: transparent; }
+    .history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .75rem;
+      padding: .3rem .5rem;
+      border-radius: 6px;
+      background: var(--surface);
+    }
+
+    .h-round { color: var(--muted); min-width: 2.5rem; font-family: 'Orbitron', monospace; font-size: .65rem; }
+    .h-moves { flex: 1; }
+    .h-result { font-weight: 700; min-width: 4rem; text-align: right; }
+    .h-result.win { color: var(--win); }
+    .h-result.loss { color: var(--loss); }
+    .h-result.draw { color: var(--draw); }
+
+    /* ── 리셋 버튼 ── */
+    .reset-btn {
+      width: 100%;
+      padding: .8rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: .85rem;
+      cursor: pointer;
+      transition: all .2s ease;
+      letter-spacing: .05em;
+    }
+
+    .reset-btn:hover {
+      border-color: var(--loss);
+      color: var(--loss);
+      background: rgba(239,68,68,.05);
+    }
+
+    /* ── 반응형 ── */
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .battle-move { font-size: 2.5rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">RPS · AI</div>
+    <div class="subtitle">패턴 학습 가위바위보 · Markov Chain</div>
+  </header>
+
+  <!-- 점수판 -->
+  <div class="scoreboard">
+    <div class="score-card player-card">
+      <div class="score-label">Player</div>
+      <div class="score-num" id="player-score">0</div>
+    </div>
+    <div class="vs-badge">VS</div>
+    <div class="score-card ai-card">
+      <div class="score-label">AI</div>
+      <div class="score-num" id="ai-score">0</div>
+    </div>
+  </div>
+
+  <!-- 대결 영역 -->
+  <div class="battle-area" id="battle-area">
+    <div class="placeholder-text">이동을 선택하세요</div>
+  </div>
+
+  <!-- AI 예측 정보 -->
+  <div class="ai-info" id="ai-info" style="display:none;">
+    <span class="badge">AI 예측</span>
+    <span id="ai-predicted-text">—</span>
+    <div class="confidence-bar-wrap">
+      <div class="confidence-bar">
+        <div class="confidence-fill" id="confidence-fill" style="width:0%"></div>
+      </div>
+      <span id="confidence-text" style="min-width:3rem; text-align:right;">0%</span>
+    </div>
+  </div>
+
+  <!-- 이동 버튼 -->
+  <div class="move-buttons">
+    <button class="move-btn" onclick="play('rock')">
+      <span class="move-icon">✊</span>
+      <span class="move-name">바위</span>
+    </button>
+    <button class="move-btn" onclick="play('scissors')">
+      <span class="move-icon">✌️</span>
+      <span class="move-name">가위</span>
+    </button>
+    <button class="move-btn" onclick="play('paper')">
+      <span class="move-icon">🖐️</span>
+      <span class="move-name">보</span>
+    </button>
+  </div>
+
+  <!-- 통계 -->
+  <div class="stats-grid">
+    <!-- 승률 -->
+    <div class="stat-card">
+      <div class="stat-title">🏆 라운드 통계</div>
+      <div class="win-rate-bar">
+        <div class="win-bar" id="win-bar" style="flex:0"></div>
+        <div class="loss-bar" id="loss-bar" style="flex:0"></div>
+        <div class="draw-bar" id="draw-bar" style="flex:0"></div>
+      </div>
+      <div class="win-rate-labels">
+        <span class="wl">승 <span id="stat-wins">0</span></span>
+        <span class="dl">무 <span id="stat-draws">0</span></span>
+        <span class="ll">패 <span id="stat-losses">0</span></span>
+      </div>
+      <div style="margin-top:.5rem; font-size:.75rem; color:var(--muted);">
+        승률 <span id="stat-winrate" style="color:var(--win);">—</span>
+        &nbsp;·&nbsp; 총 <span id="stat-total">0</span>라운드
+      </div>
+    </div>
+
+    <!-- 이동 빈도 -->
+    <div class="stat-card">
+      <div class="stat-title">📊 내 이동 패턴</div>
+      <div class="freq-item">
+        <span class="freq-name">✊ 바위</span>
+        <div class="freq-bar-wrap"><div class="freq-bar" id="freq-rock" style="width:0%"></div></div>
+        <span class="freq-num" id="cnt-rock">0</span>
+      </div>
+      <div class="freq-item">
+        <span class="freq-name">✌️ 가위</span>
+        <div class="freq-bar-wrap"><div class="freq-bar" id="freq-scissors" style="width:0%"></div></div>
+        <span class="freq-num" id="cnt-scissors">0</span>
+      </div>
+      <div class="freq-item">
+        <span class="freq-name">🖐️ 보</span>
+        <div class="freq-bar-wrap"><div class="freq-bar" id="freq-paper" style="width:0%"></div></div>
+        <span class="freq-num" id="cnt-paper">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 최근 기록 -->
+  <div class="stat-card" style="margin-bottom:1rem;">
+    <div class="stat-title">📜 최근 기록</div>
+    <ul class="history-list" id="history-list">
+      <li style="color:var(--muted); font-size:.8rem; padding:.3rem .5rem;">아직 기록이 없습니다.</li>
+    </ul>
+  </div>
+
+  <!-- 리셋 -->
+  <button class="reset-btn" onclick="resetGame()">🔄 게임 초기화</button>
+
+</div>
+
+<script>
+  const MOVE_ICON = { rock: '✊', scissors: '✌️', paper: '🖐️' };
+  const MOVE_KR   = { rock: '바위', scissors: '가위', paper: '보' };
+
+  function setButtonsDisabled(disabled) {
+    document.querySelectorAll('.move-btn').forEach(b => b.disabled = disabled);
+  }
+
+  async function play(move) {
+    setButtonsDisabled(true);
+
+    try {
+      const res = await fetch('/api/play', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ move })
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+
+      renderRound(data.round_data);
+      renderStats(data.stats);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setButtonsDisabled(false);
+    }
+  }
+
+  function renderRound(r) {
+    const area = document.getElementById('battle-area');
+    area.className = 'battle-area result-' + r.result;
+
+    area.innerHTML = `
+      <div class="battle-content">
+        <div class="battle-side">
+          <div class="battle-move">${MOVE_ICON[r.player_move]}</div>
+          <div class="battle-label">나 · ${MOVE_KR[r.player_move]}</div>
+        </div>
+        <div class="battle-divider">
+          <div class="round-num">ROUND ${r.round}</div>
+          <div class="result-text ${r.result === 'player' ? 'win' : r.result === 'ai' ? 'loss' : 'draw'}">
+            ${r.result_kr}
+          </div>
+        </div>
+        <div class="battle-side">
+          <div class="battle-move">${MOVE_ICON[r.ai_move]}</div>
+          <div class="battle-label">AI · ${MOVE_KR[r.ai_move]}</div>
+        </div>
+      </div>`;
+
+    // AI 예측 정보 표시
+    if (r.predicted_player_move) {
+      document.getElementById('ai-info').style.display = 'flex';
+      document.getElementById('ai-predicted-text').textContent =
+        `"${MOVE_KR[r.predicted_player_move]}" 예측 후 "${MOVE_KR[r.ai_move]}" 선택`;
+      const conf = r.ai_confidence;
+      document.getElementById('confidence-fill').style.width = conf + '%';
+      document.getElementById('confidence-text').textContent = conf + '%';
+    }
+
+    document.getElementById('player-score').textContent = r.player_score;
+    document.getElementById('ai-score').textContent = r.ai_score;
+  }
+
+  function renderStats(s) {
+    document.getElementById('stat-wins').textContent = s.wins;
+    document.getElementById('stat-losses').textContent = s.losses;
+    document.getElementById('stat-draws').textContent = s.draws;
+    document.getElementById('stat-total').textContent = s.total_rounds;
+    document.getElementById('stat-winrate').textContent =
+      s.total_rounds > 0 ? s.win_rate + '%' : '—';
+
+    // 승/무/패 바
+    const total = s.total_rounds || 1;
+    document.getElementById('win-bar').style.flex  = s.wins;
+    document.getElementById('loss-bar').style.flex = s.losses;
+    document.getElementById('draw-bar').style.flex = s.draws;
+
+    // 이동 빈도
+    const counts = s.player_move_counts;
+    const maxCnt = Math.max(counts.rock, counts.scissors, counts.paper, 1);
+    ['rock', 'scissors', 'paper'].forEach(m => {
+      document.getElementById('freq-' + m).style.width = (counts[m] / maxCnt * 100) + '%';
+      document.getElementById('cnt-' + m).textContent = counts[m];
+    });
+
+    // 최근 기록
+    const list = document.getElementById('history-list');
+    if (s.result_history.length === 0) {
+      list.innerHTML = '<li style="color:var(--muted); font-size:.8rem; padding:.3rem .5rem;">아직 기록이 없습니다.</li>';
+      return;
+    }
+    list.innerHTML = [...s.result_history].reverse().map(r => `
+      <li class="history-item">
+        <span class="h-round">R${r.round}</span>
+        <span class="h-moves">${MOVE_ICON[r.player_move]} vs ${MOVE_ICON[r.ai_move]}</span>
+        <span class="h-result ${r.result === 'player' ? 'win' : r.result === 'ai' ? 'loss' : 'draw'}">
+          ${r.result_kr}
+        </span>
+      </li>`).join('');
+  }
+
+  async function resetGame() {
+    if (!confirm('게임을 초기화하시겠습니까?')) return;
+    await fetch('/api/reset', { method: 'POST' });
+
+    document.getElementById('player-score').textContent = '0';
+    document.getElementById('ai-score').textContent = '0';
+    document.getElementById('battle-area').className = 'battle-area';
+    document.getElementById('battle-area').innerHTML = '<div class="placeholder-text">이동을 선택하세요</div>';
+    document.getElementById('ai-info').style.display = 'none';
+
+    ['stat-wins','stat-losses','stat-draws','stat-total'].forEach(id =>
+      document.getElementById(id).textContent = '0');
+    document.getElementById('stat-winrate').textContent = '—';
+    ['win-bar','loss-bar','draw-bar'].forEach(id =>
+      document.getElementById(id).style.flex = '0');
+    ['rock','scissors','paper'].forEach(m => {
+      document.getElementById('freq-' + m).style.width = '0%';
+      document.getElementById('cnt-' + m).textContent = '0';
+    });
+    document.getElementById('history-list').innerHTML =
+      '<li style="color:var(--muted); font-size:.8rem; padding:.3rem .5rem;">아직 기록이 없습니다.</li>';
+  }
+</script>
+</body>
+</html>
